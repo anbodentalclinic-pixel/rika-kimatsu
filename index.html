@@ -100,14 +100,20 @@ function buildPayload(){
  sheets["まとめ"]=sum;sheets["まちがい"]=[miss[0]].concat(body.length?body:[["","","（なし）",""]]);
  return {key:LOG_KEY,app:"rika",at:new Date().toISOString(),device:device(),sheets,daily};
 }
+/* この端末でまだ何もしていない（クリア0・まちがい0・苦手なし）なら送らない。
+   ほかの端末の記録を空の記録で上書きしないため */
+function isEmptyPayload(p){const d=p.daily||{},n=(p.sheets&&p.sheets["苦手"])||[];
+ return !(d.clear>0)&&!(d.miss>0)&&!n.some((r,i)=>i>0&&r[2]&&r[2]!=="（なし）");}
 let lastSent="";
 function syncNow(force){
  const url=logUrl();if(!/^https:\/\/script\.google\.com\//.test(url)){drawSync();return;}
  let p;try{p=buildPayload();}catch(e){return;}
+ if(isEmptyPayload(p)){drawSync();return;}
  const sig=JSON.stringify(p.sheets);if(!force&&sig===lastSent)return;lastSent=sig;
- try{fetch(url,{method:"POST",mode:"no-cors",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(p)}).then(()=>{ls("rika-last-sync",new Date().toLocaleString("ja-JP"));drawSync();}).catch(()=>{});}catch(e){}
+ try{fetch(url,{method:"POST",mode:"no-cors",keepalive:true,headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(p)}).then(()=>{ls("rika-last-sync",new Date().toLocaleString("ja-JP"));drawSync();}).catch(()=>{});}catch(e){}
 }
-function drawSync(){const ok=/^https:\/\/script\.google\.com\//.test(logUrl());$("syncSt").textContent=ok?"送信先：設定ずみ"+(ls("rika-last-sync")?"（最後に送った時刻 "+ls("rika-last-sync")+"）":""):"送信先：まだ設定されていません";}
+function drawSync(){const ok=/^https:\/\/script\.google\.com\//.test(logUrl());let emp=false;try{emp=isEmptyPayload(buildPayload());}catch(e){}
+ $("syncSt").textContent=ok&&emp?"送信先：設定ずみ（この端末にはまだ記録がないので送りません）":ok?"送信先：設定ずみ"+(ls("rika-last-sync")?"（最後に送った時刻 "+ls("rika-last-sync")+"）":""):"送信先：まだ設定されていません";}
 setInterval(()=>{if($("player").classList.contains("on"))syncNow();},120000);
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="hidden")syncNow();});
 function load(k){try{return JSON.parse(localStorage.getItem(k))||{};}catch(e){return {};}}
